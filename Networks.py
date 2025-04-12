@@ -7,6 +7,60 @@ classification = torch.tensor
 latent_variable = torch.tensor
 image = torch.tensor
 
+def anderson(net, u0, Qd, tol=1.0e-3, max_iters=100, m=5, beta=0.5, lam=1.0e-6):
+        """
+        Fixed-Point Iteration with Anderson acceleration 
+
+        Parameters:
+            net: INN object that has implementation of function for 
+                 evaluating operator T latent_space_forward()
+            u0: Initial guess
+            Qd: Data mapped to latent space
+            tol: Error tolerance for convergence
+            m: Number of previous iterations to use in least-squares 
+               optimization problem
+            beta: Parameter in Anderson acceleration iteration
+            lam: Regularization parameter
+
+        Return:
+            Fixed point of T_eval and number of iterations
+        """
+        batch_sz, d, h, w = u0.shape
+        u_hist = torch.zeros(batch_sz, m, d*h*w, dtype=u0.dtype, device=u0.device)
+        T_hist = torch.zeros(batch_sz, m, d*h*w, dtype=u0.dtype, device=u0.device)
+        u_hist[:,0] = u0.view(batch_sz, -1)
+        T_hist[:,0] = net.latent_space_forward(u0, Qd).view(batch_sz,-1)
+        u_hist[:,1] = T_hist[:,0]
+        T_hist[:,1] = net.latent_space_forward(T_hist[:,0].view_as(u0), Qd).view(batch_sz,-1)
+        H = torch.zeros(batch_sz, m+1, m+1, dtype=u0.dtype, device=u0.device)
+        H[:,0,1:] = 1
+        H[:,1:,0] = 1
+        Batch_RHS = torch.zeros(batch_sz, m+1, 1, dtype=u0.dtype, device=u0.device)
+        Batch_RHS[:,0] = 1 
+
+        res_k = ((T_hist[:,0] - u_hist[:,0]).norm().item()) / (1.0e-9 + T_hist[:,0].norm().item())
+        k = 1
+        res_k = ((T_hist[:,k%m] - u_hist[:,k%m]).norm().item()) / (1.0e-9 + T_hist[:,k%m].norm().item())
+        k += 1
+        while (res_k > tol and k < max_iters):
+            M = min(k,m)
+            G = T_hist[:,:M] - u_hist[:,:M]
+            H[:,1:(M+1),1:(M+1)] = torch.bmm(G, G.transpose(1,2)) + lam*torch.eye(M, dtype=u0.dtype, device=u0.device)[None]
+
+            #Solve for alpha
+            alpha = None
+            try:
+                alpha = torch.linalg.solve(H[:,:(M+1),:(M+1)], Batch_RHS[:,:(M+1)])[:,1:(M+1),0]#Result is batch_sz x n
+            except RuntimeError:#If matrix is singular solve using QR least squares
+                alpha = torch.linalg.lstsq(H[:,:(M+1),:(M+1)], Batch_RHS[:,:(M+1)])[0][:,1:(M+1)]
+
+            #Update data structures
+            u_hist[:,k%m] = (1.0-beta)*((alpha[:,None]@u_hist[:,:M])[:,0]) + beta*((alpha[:,None]@T_hist[:,:M])[:,0])
+            T_hist[:,k%m] = net.latent_space_forward(u_hist[:,k%m].view_as(u0), Qd).view(batch_sz, -1)
+            res_k = ((T_hist[:,k%m] - u_hist[:,k%m]).norm().item()) / (1.0e-9 + T_hist[:,k%m].norm().item())
+            k += 1
+
+        return u_hist[:,k%m].view_as(u0), k
 
 def forward_implicit(net, d: image, eps=1.0e-3, max_depth=100,
                      depth_warning=False):
@@ -22,13 +76,17 @@ def forward_implicit(net, d: image, eps=1.0e-3, max_depth=100,
         Qd = net.data_space_forward(d)
         u = torch.zeros(Qd.shape, device=net.device())
         u_prev = np.Inf*torch.ones(u.shape, device=net.device())
-        all_samp_conv = False
-        while not all_samp_conv and net.depth < max_depth:
-            u_prev = u.clone()
-            u = net.latent_space_forward(u, Qd)
+        if not net.use_anderson:
+            all_samp_conv = False
+            while not all_samp_conv and net.depth < max_depth:
+                u_prev = u.clone()
+                u = net.latent_space_forward(u, Qd)
             res_norm = torch.max(torch.norm(u - u_prev, dim=1))
             net.depth += 1.0
             all_samp_conv = res_norm <= eps
+        else:
+            u_prev = u.clone()
+            u, itr = anderson(net, u, Qd, beta=1.5)
 
         if net.training:
             net.normalize_lip_const(u_prev, Qd)
@@ -103,7 +161,7 @@ def normalize_lip_const(net, u: latent_variable, v: latent_variable):
 
 class MNIST_FPN(nn.Module):
     def __init__(self, lat_layers=4, num_channels=32, contraction_factor=0.1,
-                 momentum=0.1, architecture='FPN'):
+                 momentum=0.1, architecture='FPN', use_and=False):
         super().__init__()
 
         self._channels = num_channels
@@ -149,6 +207,7 @@ class MNIST_FPN(nn.Module):
                                                             momentum=self.mom,
                                                             affine=False)
                                             for _ in range(lat_layers)])
+        self.use_anderson = use_and
 
     def name(self):
         '''
@@ -308,7 +367,7 @@ def _make_layer(net, block, planes, num_blocks, stride):
 class SVHN_FPN(nn.Module):
     def __init__(self, lat_layers=4, num_channels=32, contraction_factor=0.1,
                  momentum=0.1, block=BasicBlock, num_blocks=[1, 1, 1],
-                 architecture='FPN'):
+                 architecture='FPN', use_and=False):
         super().__init__()
         self.avg_pool = nn.AvgPool2d(kernel_size=2)
         self._channels = num_channels
@@ -356,6 +415,7 @@ class SVHN_FPN(nn.Module):
                                                             momentum=self.mom,
                                                             affine=False)
                                             for _ in range(lat_layers)])
+        self.use_anderson = use_and
 
     def name(self):
         '''
@@ -455,7 +515,7 @@ class SVHN_FPN(nn.Module):
 # -----------------------------------------------------------------------------
 class CIFAR10_FPN(nn.Module):
     def __init__(self, data_layers=16, num_channels=35, contraction_factor=0.5,
-                 momentum=0.1, lat_layers=5, architecture='FPN'):
+                 momentum=0.1, lat_layers=5, architecture='FPN', use_and=False):
         super().__init__()
         self.avg_pool = nn.AvgPool2d(kernel_size=2)
         self._channels = num_channels
@@ -525,6 +585,7 @@ class CIFAR10_FPN(nn.Module):
                                             for _ in range(lat_layers)])
         self.conv_y = nn.Conv2d(num_channels, num_channels,
                                 kernel_size=3, stride=2, padding=(1, 1))
+        self.use_anderson = use_and
 
     def name(self):
         '''
