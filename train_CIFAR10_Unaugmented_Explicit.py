@@ -47,4 +47,4 @@ train_loader, test_loader = cifar_loaders(train_batch_size=batch_size,
 # train network!
 T = train_class_net(T, max_epochs, lr_scheduler, train_loader,
                     test_loader, optimizer, loss, 10,
-                    eps, max_depth, save_dir='./')
+                    eps, max_depth, device, save_dir='./')

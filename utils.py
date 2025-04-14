@@ -7,7 +7,8 @@ import torchvision.transforms as transforms
 from torchvision import datasets
 import numpy as np
 from BatchCG import cg_batch
-
+from torch.cuda import memory_allocated
+from tracemalloc import get_traced_memory
 
 def get_stats(net, test_loader, criterion, num_classes: int, eps: float,
               max_depth: int):
@@ -59,7 +60,7 @@ def model_params(net):
 
 def train_class_net(net, max_epochs, lr_scheduler, train_loader,
                     test_loader, optimizer, criterion,
-                    num_classes, eps, max_depth, save_dir='./'):
+                    num_classes, eps, max_depth, device, save_dir='./'):
 
     fmt = '[{:3d}/{:3d}]: train - ({:6.2f}%, {:6.2e}), test - ({:6.2f}%, '
     fmt += '{:6.2e}) | depth = {:4.1f} | lr = {:5.1e} | time = {:4.1f} sec'
@@ -74,6 +75,7 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
     test_acc_hist = []
     train_loss_hist = []
     train_acc_hist = []
+    mem_hist = []
 
     print(net)
     print(model_params(net))
@@ -83,6 +85,11 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
         sleep(0.5)  # slows progress bar so it won't print on multiple lines
         loss_ave = 0.0
         epoch_start_time = time.time()
+        epoch_start_mem = 0.0
+        if device == "cuda":
+            epoch_start_mem = memory_allocated()
+        elif device == "cpu":
+            epoch_start_mem = get_traced_memory()[0]#Get current, not peak
         tot = len(train_loader)
         with tqdm(total=tot, unit=" batch", leave=False, ascii=True) as tepoch:
 
@@ -143,9 +150,16 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
         train_loss_hist.append(loss_ave)
         train_acc_hist.append(train_acc)
 
+        epoch_end_mem = 0.0
+        if device == "cuda":
+            epoch_end_mem = memory_allocated()
+        elif device == "cpu":
+            epoch_end_mem = get_traced_memory()[0]#Get current, not peak
+        mem_epoch = epoch_end_mem - epoch_start_mem
+        mem_hist.append(mem_epoch/1.0e6)#Memory consumption for current epoch in MB
+
         epoch_end_time = time.time()
         time_epoch = epoch_end_time - epoch_start_time
-
         time_hist.append(time_epoch)
         total_time += time_epoch
 
@@ -180,6 +194,7 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
                 'lr_scheduler': lr_scheduler,
                 'time_hist': time_hist,
                 'eps': eps,
+                'mem_hist': mem_hist,
             }
             file_name = save_dir + net.name() + '_history.pth'
             torch.save(state, file_name)

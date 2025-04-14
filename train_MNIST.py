@@ -5,12 +5,12 @@ from Networks import MNIST_FPN
 from utils import mnist_loaders
 from utils import train_class_net
 
-device = 'cuda:1'
+device = "cuda"
 print('device = ', device)
 
 seed = 53
 torch.manual_seed(seed)
-save_dir = './results/'
+save_dir = "results/"
 
 # -----------------------------------------------------------------------------
 # Network setup
@@ -19,7 +19,7 @@ contraction_factor = 0.5
 lat_layers = 2
 T = MNIST_FPN(lat_layers=lat_layers, num_channels=32,
               contraction_factor=contraction_factor,
-              architecture='FPN').to(device)
+              architecture='FPN', use_and=True).to(device)
 num_classes = 10
 eps = 1.0e-1
 max_depth = 50
@@ -27,7 +27,7 @@ max_depth = 50
 # -----------------------------------------------------------------------------
 # Training settings
 # -----------------------------------------------------------------------------
-max_epochs = 100
+max_epochs = 10#100
 learning_rate = 2e-4
 weight_decay = 1e-6
 optimizer = optim.Adam(T.parameters(), lr=learning_rate,
@@ -51,4 +51,4 @@ train_loader, test_loader = mnist_loaders(train_batch_size=batch_size,
 
 T = train_class_net(T, max_epochs, lr_scheduler, train_loader,
                     test_loader, optimizer, criterion, num_classes,
-                    eps, max_depth, save_dir=save_dir)
+                    eps, max_depth, device, save_dir=save_dir)

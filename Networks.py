@@ -23,7 +23,7 @@ def anderson(net, u0, Qd, tol=1.0e-3, max_iters=100, m=5, beta=0.5, lam=1.0e-6):
             lam: Regularization parameter
 
         Return:
-            Fixed point of T_eval and number of iterations
+            Fixed point of T_eval, value of u after previous iteration, and number of iterations
         """
         batch_sz, d, h, w = u0.shape
         u_hist = torch.zeros(batch_sz, m, d*h*w, dtype=u0.dtype, device=u0.device)
@@ -51,7 +51,7 @@ def anderson(net, u0, Qd, tol=1.0e-3, max_iters=100, m=5, beta=0.5, lam=1.0e-6):
             alpha = None
             try:
                 alpha = torch.linalg.solve(H[:,:(M+1),:(M+1)], Batch_RHS[:,:(M+1)])[:,1:(M+1),0]#Result is batch_sz x n
-            except RuntimeError:#If matrix is singular solve using QR least squares
+            except RuntimeError:#If matrix is singular solve using Householder QR least squares
                 alpha = torch.linalg.lstsq(H[:,:(M+1),:(M+1)], Batch_RHS[:,:(M+1)])[0][:,1:(M+1)]
 
             #Update data structures
@@ -60,7 +60,7 @@ def anderson(net, u0, Qd, tol=1.0e-3, max_iters=100, m=5, beta=0.5, lam=1.0e-6):
             res_k = ((T_hist[:,k%m] - u_hist[:,k%m]).norm().item()) / (1.0e-9 + T_hist[:,k%m].norm().item())
             k += 1
 
-        return u_hist[:,k%m].view_as(u0), k
+        return u_hist[:,k%m].view_as(u0), u_hist[:,(k-1)%m].view_as(u0), k
 
 def forward_implicit(net, d: image, eps=1.0e-3, max_depth=100,
                      depth_warning=False):
@@ -70,7 +70,6 @@ def forward_implicit(net, d: image, eps=1.0e-3, max_depth=100,
         u is updated via R(u,Q(d)) and Lipschitz constant estimates are
         refined. Gradient are attached performing one final step.
     '''
-
     with torch.no_grad():
         net.depth = 0.0
         Qd = net.data_space_forward(d)
@@ -81,12 +80,12 @@ def forward_implicit(net, d: image, eps=1.0e-3, max_depth=100,
             while not all_samp_conv and net.depth < max_depth:
                 u_prev = u.clone()
                 u = net.latent_space_forward(u, Qd)
-            res_norm = torch.max(torch.norm(u - u_prev, dim=1))
-            net.depth += 1.0
-            all_samp_conv = res_norm <= eps
-        else:
-            u_prev = u.clone()
-            u, itr = anderson(net, u, Qd, beta=1.5)
+                res_norm = torch.max(torch.norm(u - u_prev, dim=1))
+                net.depth += 1.0
+                all_samp_conv = res_norm <= eps
+        else:#Anderson acceleration  
+            u, u_prev, num_itr = anderson(net, u, Qd, tol=eps, max_iters=max_depth, beta=1.5)
+            net.depth += num_itr
 
         if net.training:
             net.normalize_lip_const(u_prev, Qd)

@@ -51,4 +51,4 @@ train_loader, test_loader = mnist_loaders(train_batch_size=batch_size,
 
 T = train_class_net(T, max_epochs, lr_scheduler, train_loader,
                     test_loader, optimizer, criterion, num_classes,
-                    eps, max_depth, save_dir=save_dir)
+                    eps, max_depth, device, save_dir=save_dir)

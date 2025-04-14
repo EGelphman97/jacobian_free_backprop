@@ -4,12 +4,12 @@ import torch.optim as optim
 from Networks import CIFAR10_FPN
 from utils import cifar_loaders, train_class_net
 
-device = "cuda:1"
+device = "cpu"
 print('device = ', device)
 
 seed = 1000
 torch.manual_seed(seed)
-save_dir = './results/'
+save_dir = "results/"
 
 # -----------------------------------------------------------------------------
 # Network setup
@@ -21,7 +21,7 @@ num_channels = 35
 T = CIFAR10_FPN(lat_layers=lat_layers, num_channels=num_channels,
                 contraction_factor=contraction_factor,
                 data_layers=data_layers,
-                architecture='FPN').to(device)
+                architecture='FPN', use_and=True).to(device)
 num_classes = 10
 eps = 1.0e-1
 max_depth = 50
@@ -50,4 +50,4 @@ train_loader, test_loader = cifar_loaders(train_batch_size=batch_size,
 # train network!
 T = train_class_net(T, max_epochs, lr_scheduler, train_loader,
                     test_loader, optimizer, criterion, num_classes,
-                    eps, max_depth, save_dir=save_dir)
+                    eps, max_depth, device, save_dir=save_dir)

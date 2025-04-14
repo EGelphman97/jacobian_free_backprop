@@ -5,12 +5,12 @@ from Networks import SVHN_FPN, BasicBlock
 from utils import svhn_loaders
 from utils import train_class_net
 
-device = 'cuda:0'
+device = "cpu"#'cuda:0'
 print('device = ', device)
 
 seed = 988
 torch.manual_seed(seed)
-save_dir = './results/'
+save_dir = "results/"#'./results/'
 
 # -----------------------------------------------------------------------------
 # Network setup
@@ -20,7 +20,7 @@ contraction_factor = 0.9
 lat_layers = 1
 T = SVHN_FPN(lat_layers=lat_layers, num_channels=64,
              contraction_factor=contraction_factor, block=BasicBlock,
-             num_blocks=num_blocks, architecture='FPN').to(device)
+             num_blocks=num_blocks, architecture='FPN', use_and=True).to(device)
 num_classes = 10
 eps = 1.0e-4
 max_depth = 200
@@ -52,4 +52,4 @@ train_loader, test_loader = svhn_loaders(train_batch_size=batch_size,
 # train network!
 T = train_class_net(T, max_epochs, lr_scheduler, train_loader,
                     test_loader, optimizer, criterion, num_classes,
-                    eps, max_depth, save_dir=save_dir)
+                    eps, max_depth, device, save_dir=save_dir)
