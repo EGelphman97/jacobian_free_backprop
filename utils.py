@@ -7,8 +7,8 @@ import torchvision.transforms as transforms
 from torchvision import datasets
 import numpy as np
 from BatchCG import cg_batch
-from torch.cuda import memory_allocated
-from tracemalloc import get_traced_memory
+from torch.cuda import memory_allocated, max_memory_allocated
+from tracemalloc import start, get_traced_memory
 
 def get_stats(net, test_loader, criterion, num_classes: int, eps: float,
               max_depth: int):
@@ -75,23 +75,24 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
     test_acc_hist = []
     train_loss_hist = []
     train_acc_hist = []
-    mem_hist = []
     avg_depth_hist = []
+    depth_max_hist = []
 
     print(net)
     print(model_params(net))
     print('\nTraining Fixed Point Network')
 
+    mem_epoch = 0.0
+    peak_mem = 0.0
+    if device == "cpu":#Start memory allocation measurement using tracemalloc
+        start()
+
     for epoch in range(max_epochs):
         sleep(0.5)  # slows progress bar so it won't print on multiple lines
         loss_ave = 0.0
         epoch_start_time = time.time()
-        epoch_start_mem = 0.0
-        if device == "cuda":
-            epoch_start_mem = memory_allocated()
-        elif device == "cpu":
-            epoch_start_mem = get_traced_memory()[0]#Get current, not peak
         tot = len(train_loader)
+        depth_max = -1#Maximum depth of fixed point network in current epoch
         with tqdm(total=tot, unit=" batch", leave=False, ascii=True) as tepoch:
 
             tepoch.set_description("[{:3d}/{:3d}]".format(epoch+1, max_epochs))
@@ -109,6 +110,8 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
                 y = net(d, eps=eps, max_depth=max_depth)
 
                 depth_ave = 0.99 * depth_ave + 0.01 * net.depth
+                if net.depth > depth_max:
+                    depth_max = net.depth
                 output = None
                 if str(criterion) == "MSELoss()":
                     ut = torch.zeros((batch_size, num_classes))
@@ -151,14 +154,12 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
         train_loss_hist.append(loss_ave)
         train_acc_hist.append(train_acc)
 
-        epoch_end_mem = 0.0
         if device == "cuda":
-            epoch_end_mem = memory_allocated()
+            mem_epoch += memory_allocated(device)
         elif device == "cpu":
-            epoch_end_mem = get_traced_memory()[0]#Get current, not peak
-        mem_epoch = epoch_end_mem - epoch_start_mem
-        mem_hist.append(mem_epoch/1.0e6)#Memory consumption for current epoch in MB
+            mem_epoch += get_traced_memory()[0]#Get current, not peak
         avg_depth_hist.append(depth_ave)
+        depth_max_hist.append(depth_max)
 
         epoch_end_time = time.time()
         time_epoch = epoch_end_time - epoch_start_time
@@ -188,6 +189,11 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
         # Save history at last epoch
         # ---------------------------------------------------------------------
         if epoch+1 == max_epochs:
+            mem_epoch /= max_epochs
+            if device == "cuda":
+                peak_mem = max_memory_allocated(device)
+            elif device == "cpu":
+                peak_mem = get_traced_memory()[1]
             state = {
                 'test_loss_hist': test_loss_hist,
                 'test_acc_hist': test_acc_hist,
@@ -196,8 +202,10 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
                 'lr_scheduler': lr_scheduler,
                 'time_hist': time_hist,
                 'eps': eps,
-                'mem_hist': mem_hist,
+                'avg_mem': mem_epoch,
+                'peak_mem': peak_mem,
                 'avg_depth_hist': avg_depth_hist,
+                'depth_max_hist': depth_max_hist,
             }
             file_name = save_dir + net.name() + '_history.pth'
             torch.save(state, file_name)

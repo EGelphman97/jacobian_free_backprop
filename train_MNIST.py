@@ -5,7 +5,7 @@ from Networks import MNIST_FPN
 from utils import mnist_loaders
 from utils import train_class_net
 
-device = "cuda"
+device = "cpu"
 print('device = ', device)
 
 seed = 53

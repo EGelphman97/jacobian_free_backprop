@@ -5,12 +5,12 @@ from Networks import MNIST_FPN
 from utils import mnist_loaders
 from utils import train_class_net
 
-device = 'cuda:1'
+device = "cuda"
 print('device = ', device)
 
 seed = 53
 torch.manual_seed(seed)
-save_dir = './results/'
+save_dir = "results/"
 
 # -----------------------------------------------------------------------------
 # Network setup
