@@ -9,6 +9,7 @@ def main():
     test_accr = res_dict["test_acc_hist"]
     time_epoch = res_dict["time_hist"]
     mem_epoch = res_dict["mem_hist"]
+    avg_depth = res_dict["avg_depth_hist"]
     epoch = np.arange(len(train_accr)) + 1
     
     #Training and Test accuracy
@@ -16,7 +17,7 @@ def main():
     plt.xlabel("Epoch")
     plt.ylabel("Accuracy (%)")
     plt.title("Train and Test Accuracy")
-    plt.plot(epoch, train_accr, color='b', label="Train Acc.")
+    plt.plot(epoch, train_accr, color='k', label="Train Acc.")
     plt.plot(epoch, test_accr, color='g', label="Test Acc.")
     plt.legend()
     plt.show()
@@ -26,7 +27,7 @@ def main():
     plt.xlabel("Epoch")
     plt.ylabel("Time (s)")
     plt.title("Runtime per Epoch")
-    plt.plot(epoch, time_epoch, color='b')
+    plt.plot(epoch, time_epoch, color='k')
     plt.show()
 
     #Memory Usage
@@ -34,8 +35,16 @@ def main():
     plt.xlabel("Epoch")
     plt.ylabel("Memory (MB)")
     plt.title("Memory Usage per Epoch")
-    plt.plot(epoch, mem_epoch, color='b')
+    plt.plot(epoch, mem_epoch, color='k')
     plt.show()
-    
+
+    #Average network depth (number of fixed-point iterations) per epoch
+    plt.figure()
+    plt.xlabel("Epoch")
+    plt.ylabel("Average # Fixed Point Iterations")
+    plt.title("Average # Fixed Point Iterations per Epoch")
+    plt.plot(epoch, avg_depth, color='k')
+    plt.show()
+
 if __name__ == "__main__":
     main()

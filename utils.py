@@ -76,6 +76,7 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
     train_loss_hist = []
     train_acc_hist = []
     mem_hist = []
+    avg_depth_hist = []
 
     print(net)
     print(model_params(net))
@@ -157,6 +158,7 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
             epoch_end_mem = get_traced_memory()[0]#Get current, not peak
         mem_epoch = epoch_end_mem - epoch_start_mem
         mem_hist.append(mem_epoch/1.0e6)#Memory consumption for current epoch in MB
+        avg_depth_hist.append(depth_ave)
 
         epoch_end_time = time.time()
         time_epoch = epoch_end_time - epoch_start_time
@@ -195,6 +197,7 @@ def train_class_net(net, max_epochs, lr_scheduler, train_loader,
                 'time_hist': time_hist,
                 'eps': eps,
                 'mem_hist': mem_hist,
+                'avg_depth_hist': avg_depth_hist,
             }
             file_name = save_dir + net.name() + '_history.pth'
             torch.save(state, file_name)
