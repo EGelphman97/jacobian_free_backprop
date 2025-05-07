@@ -3,12 +3,12 @@ import torch.nn as nn
 import torch.optim as optim
 from Networks import MNIST_FPN
 from utils import mnist_loaders, train_Jacobian_based_net
-device = "cuda:1"
+device = "cuda"
 print('device = ', device)
 
 seed = 1003
 torch.manual_seed(seed)
-save_dir = './results/'
+save_dir = "results/"#'./results/'
 
 # -----------------------------------------------------------------------------
 # Network setup
@@ -17,7 +17,7 @@ contraction_factor = 0.5
 lat_layers = 2
 T = MNIST_FPN(lat_layers=lat_layers, num_channels=32,
               contraction_factor=contraction_factor,
-              architecture='Jacobian').to(device)
+              architecture='Jacobian', use_and=True).to(device)
 num_classes = 10
 eps = 1.0e-1
 max_depth = 50
@@ -25,7 +25,7 @@ max_depth = 50
 # -----------------------------------------------------------------------------
 # Training settings
 # -----------------------------------------------------------------------------
-max_epochs = 100
+max_epochs = 10
 learning_rate = 2e-4
 weight_decay = 1e-6
 optimizer = optim.Adam(T.parameters(), lr=learning_rate,
@@ -41,8 +41,8 @@ print('weight_decay = ', weight_decay, ', learning_rate = ', learning_rate,
 # -----------------------------------------------------------------------------
 # Load dataset
 # -----------------------------------------------------------------------------
-batch_size = 100
-test_batch_size = 400
+batch_size = 1250
+test_batch_size = 2500
 
 train_loader, test_loader = mnist_loaders(train_batch_size=batch_size,
                                           test_batch_size=test_batch_size)

@@ -1,11 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.profiler import profile, ProfilerActivity
 from Networks import MNIST_FPN
 from utils import mnist_loaders
-from utils import train_class_net
+from utils import train_class_net, train_class_net_prof
 
-device = "cpu"
+
+device = "cuda"
 print('device = ', device)
 
 seed = 53
@@ -27,7 +29,7 @@ max_depth = 50
 # -----------------------------------------------------------------------------
 # Training settings
 # -----------------------------------------------------------------------------
-max_epochs = 10#100
+max_epochs = 10
 learning_rate = 2e-4
 weight_decay = 1e-6
 optimizer = optim.Adam(T.parameters(), lr=learning_rate,
@@ -50,5 +52,7 @@ train_loader, test_loader = mnist_loaders(train_batch_size=batch_size,
                                           test_batch_size=test_batch_size)
 
 T = train_class_net(T, max_epochs, lr_scheduler, train_loader,
-                    test_loader, optimizer, criterion, num_classes,
-                    eps, max_depth, device, save_dir=save_dir)
+                  test_loader, optimizer, criterion, num_classes,
+                  eps, max_depth, device, save_dir=save_dir)
+
+      

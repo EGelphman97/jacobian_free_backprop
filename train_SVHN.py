@@ -5,7 +5,7 @@ from Networks import SVHN_FPN, BasicBlock
 from utils import svhn_loaders
 from utils import train_class_net
 
-device = "cpu"#'cuda:0'
+device = "cuda"
 print('device = ', device)
 
 seed = 988
